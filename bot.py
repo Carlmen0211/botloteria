@@ -17,10 +17,37 @@ TOKEN = os.environ.get("BOT_TOKEN", "")
 CANAL_ID = os.environ.get("CANAL_ID", "@resultadoslafija")
 PORT = int(os.environ.get("PORT", 8080))
 
-print(f"[INFO] Bot iniciando... PORT={PORT} CANAL={CANAL_ID}")
+print("=" * 60)
+print(f"[DIAGNOSTICO] TOKEN presente: {'SI' if TOKEN else 'NO'}")
+print(f"[DIAGNOSTICO] TOKEN longitud: {len(TOKEN)} caracteres")
+print(f"[DIAGNOSTICO] CANAL_ID: {CANAL_ID}")
+print(f"[DIAGNOSTICO] PORT: {PORT}")
+print("=" * 60)
 
-if not TOKEN:
-    print("[WARN] BOT_TOKEN no definido. El bot no enviara mensajes.")
+# ==============================================================================
+# TEST DE TELEGRAM AL ARRANCAR
+# ==============================================================================
+
+bot = None
+if TOKEN:
+    try:
+        bot = telebot.TeleBot(TOKEN, parse_mode="Markdown")
+        me = bot.get_me()
+        print(f"[DIAGNOSTICO] Bot conectado: @{me.username} (ID: {me.id})")
+        
+        # INTENTAR ENVIAR MENSAJE DE PRUEBA
+        print(f"[DIAGNOSTICO] Intentando enviar mensaje de prueba a {CANAL_ID}...")
+        bot.send_message(
+            chat_id=CANAL_ID, 
+            text="🤖 *Bot activo y monitoreando resultados...*", 
+            parse_mode="Markdown"
+        )
+        print("[DIAGNOSTICO] ✅ MENSAJE DE PRUEBA ENVIADO CORRECTAMENTE")
+    except Exception as e:
+        print(f"[DIAGNOSTICO] ❌ ERROR AL ENVIAR A TELEGRAM: {e}")
+        print(f"[DIAGNOSTICO] Tipo de error: {type(e).__name__}")
+else:
+    print("[DIAGNOSTICO] ❌ No hay TOKEN, no se puede conectar a Telegram")
 
 # ==============================================================================
 # SCRAPER
@@ -101,10 +128,8 @@ def es_nuevo(key, val):
     return True
 
 # ==============================================================================
-# TELEGRAM
+# TELEGRAM ENVIO
 # ==============================================================================
-
-bot = telebot.TeleBot(TOKEN, parse_mode="Markdown") if TOKEN else None
 
 def enviar(mensaje):
     if not bot:
@@ -126,6 +151,7 @@ def ciclo():
     print("[INFO] Escaneando resultados...")
     
     r = obtener_guacharito()
+    print(f"[INFO] Guacharito scrap: {r}")
     if r and es_nuevo("guacharito", r["raw"]):
         msg = f"🔔 *RESULTADO RECIENTE* 🔔\n\n🎰 *Guacharito Millonario* ({r['hora']}):\n`{r['raw']}`\n\n🍀 *@resultadoslafija* 🍀"
         enviar(msg)
@@ -133,6 +159,7 @@ def ciclo():
         print(f"[INFO] Guacharito: sin cambios (ultimo={store.get('guacharito','')})")
     
     r = obtener_guacharo()
+    print(f"[INFO] Guacharo scrap: {r}")
     if r and es_nuevo("guacharo", r["raw"]):
         msg = f"🔔 *RESULTADO RECIENTE* 🔔\n\n🎰 *Guácharo Activo* ({r['hora']}):\n`{r['raw']}`\n\n🍀 *@resultadoslafija* 🍀"
         enviar(msg)
