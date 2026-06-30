@@ -4,9 +4,26 @@ import time
 import requests
 from bs4 import BeautifulSoup
 import cloudscraper
+import threading
+import http.server
+import socketserver
+import os
 
 # ==========================================
-# CONFIGURACIÓN
+# TRUCO DEL PUERTO PARA QUE RENDER NO SE CAIGA
+# ==========================================
+def iniciar_servidor_falso():
+    handler = http.server.SimpleHTTPRequestHandler
+    puerto = int(os.environ.get("PORT", 8080))
+    # Esto le dice a Render: "¡Oye! Aquí hay un puerto abierto, no me tumbes"
+    with socketserver.TCPServer(("", puerto), handler) as httpd:
+        httpd.serve_forever()
+
+# Iniciamos el puerto en segundo plano antes del bot
+threading.Thread(target=iniciar_servidor_falso, daemon=True).start()
+
+# ==========================================
+# CONFIGURACIÓN DEL BOT
 # ==========================================
 TOKEN = "8802621773:AAGxMumGC1MWQXo4-M2L-DMimIlyBpX36Qw"
 CANAL_ID = "@resultadoslafija" 
@@ -27,7 +44,6 @@ ULTIMO_SEGUNDA = ""
 # ==========================================
 # SCRAPERS
 # ==========================================
-
 def obtener_resultado_guacharito():
     try:
         response = scraper.get(URL_GUACHARITO, headers=HEADERS, timeout=15)
@@ -83,7 +99,6 @@ def obtener_resultado_segunda_loteria():
 # ==========================================
 # PROCESOS
 # ==========================================
-
 def revisar_y_publicar():
     global ULTIMO_GUACHARITO, ULTIMO_SEGUNDA
     print(f"[{time.strftime('%H:%M:%S')}] Escaneando actualizaciones...")
@@ -103,7 +118,7 @@ def revisar_y_publicar():
         except: pass
 
 # ==========================================
-# BUCLE PRINCIPAL
+# ARRANQUE DE MONITOREO
 # ==========================================
 print("🤖 Iniciando Super-Bot Inteligente...")
 revisar_y_publicar()
