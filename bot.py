@@ -3,6 +3,21 @@ import schedule
 import time
 import requests
 from bs4 import BeautifulSoup
+import threading
+import http.server
+import socketserver
+
+# Servidor web falso para que Render no tumbe el bot gratis
+def servidor_falso():
+    handler = http.server.SimpleHTTPRequestHandler
+    # Render asigna un puerto automático en la variable $PORT, usamos 8080 por defecto
+    import os
+    puerto = int(os.environ.get("PORT", 8080))
+    with socketserver.TCPServer(("", puerto), handler) as httpd:
+        httpd.serve_forever()
+
+# Iniciar el servidor web en un hilo separado antes de tu bot
+threading.Thread(target=servidor_falso, daemon=True).start()
 
 # ==========================================
 # CONFIGURACIÓN DE CREDENCIALES Y LINKS
