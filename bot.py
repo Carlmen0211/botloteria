@@ -4,21 +4,6 @@ import time
 import requests
 from bs4 import BeautifulSoup
 import cloudscraper
-import threading
-import http.server
-import socketserver
-import os
-
-# ==========================================
-# SERVIDOR WEB FALSO PARA RENDER
-# ==========================================
-def servidor_falso():
-    handler = http.server.SimpleHTTPRequestHandler
-    puerto = int(os.environ.get("PORT", 8080))
-    with socketserver.TCPServer(("", puerto), handler) as httpd:
-        httpd.serve_forever()
-
-threading.Thread(target=servidor_falso, daemon=True).start()
 
 # ==========================================
 # CONFIGURACIÓN
@@ -27,7 +12,7 @@ TOKEN = "8802621773:AAGxMumGC1MWQXo4-M2L-DMimIlyBpX36Qw"
 CANAL_ID = "@resultadoslafija" 
 
 bot = telebot.TeleBot(TOKEN)
-scraper = cloudscraper.create_scraper() # Cliente especial antibloqueos
+scraper = cloudscraper.create_scraper()
 
 URL_GUACHARITO = "https://elguacharitomillonario.com/resultados"
 URL_SEGUNDA_LOTERIA = "https://www.guacharoactivo.com.ve/resultados"
@@ -40,17 +25,13 @@ ULTIMO_GUACHARITO = ""
 ULTIMO_SEGUNDA = ""
 
 # ==========================================
-# SCRAPERS CON PROTECCIÓN EVASIVA
+# SCRAPERS
 # ==========================================
 
 def obtener_resultado_guacharito():
     try:
         response = scraper.get(URL_GUACHARITO, headers=HEADERS, timeout=15)
-        print(f"--- AUDITORÍA GUACHARITO (Status: {response.status_code}) ---")
-        
-        if response.status_code != 200: 
-            print(response.text[:300]) # Muestra el error en Logs
-            return None
+        if response.status_code != 200: return None
         
         soup = BeautifulSoup(response.text, 'html.parser')
         tarjetas = soup.find_all("div", class_=lambda x: x and 'p-6' in x)
@@ -69,18 +50,13 @@ def obtener_resultado_guacharito():
                 if len(numero) <= 3:
                     ultimo_sorteo = {"hora": hora, "res": f"{numero} {animal}"}
         return ultimo_sorteo
-    except Exception as e:
-        print(f"❌ Error Scraper Guacharito: {e}")
+    except:
         return None
 
 def obtener_resultado_segunda_loteria():
     try:
         response = scraper.get(URL_SEGUNDA_LOTERIA, headers=HEADERS, timeout=15)
-        print(f"--- AUDITORÍA GUÁCHARO (Status: {response.status_code}) ---")
-        
-        if response.status_code != 200:
-            print(response.text[:300])
-            return None
+        if response.status_code != 200: return None
         
         soup = BeautifulSoup(response.text, 'html.parser')
         tarjetas = soup.find_all("div", class_=lambda x: x and 'rounded-3xl' in x)
@@ -101,12 +77,11 @@ def obtener_resultado_segunda_loteria():
                 if numero == "00": numero = "100"
                 ultimo_sorteo = {"hora": hora, "res": f"{numero} {animal}"}
         return ultimo_sorteo
-    except Exception as e:
-        print(f"❌ Error Scraper Segunda Lotería: {e}")
+    except:
         return None
 
 # ==========================================
-# PROCESOS DE TELEGRAM
+# PROCESOS
 # ==========================================
 
 def revisar_y_publicar():
@@ -127,18 +102,10 @@ def revisar_y_publicar():
         try: bot.send_message(chat_id=CANAL_ID, text=mensaje, parse_mode="Markdown")
         except: pass
 
-def generar_resumen_diario():
-    print(f"[{time.strftime('%H:%M:%S')}] Generando recuento diario...")
-    fecha_hoy = time.strftime("%d/%m/%Y")
-    mensaje = f"🗓️ *BOT CONTROL INICIADO* ({fecha_hoy}) 🗓️\n\nEjecutando escaneo en la nube sin bloqueos locales.\n\n🎯 *@resultadoslafija*"
-    try: bot.send_message(chat_id=CANAL_ID, text=mensaje, parse_mode="Markdown")
-    except: pass
-
 # ==========================================
 # BUCLE PRINCIPAL
 # ==========================================
 print("🤖 Iniciando Super-Bot Inteligente...")
-generar_resumen_diario()
 revisar_y_publicar()
 
 schedule.every(2).minutes.do(revisar_y_publicar)
@@ -147,5 +114,5 @@ while True:
     try:
         schedule.run_pending()
         time.sleep(1)
-    except Exception as e:
+    except:
         time.sleep(10)
