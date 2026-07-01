@@ -95,7 +95,7 @@ def reset_store():
     print("[INFO] Store reseteado")
 
 # ==============================================================================
-# TELEGRAM (SOLO ENVIO, SIN POLLING)
+# TELEGRAM (SOLO ENVIO)
 # ==============================================================================
 
 bot = telebot.TeleBot(TOKEN, parse_mode="Markdown") if TOKEN else None
@@ -123,7 +123,7 @@ def enviar(mensaje):
         return False
 
 # ==============================================================================
-# SCRAPER
+# SCRAPER CON PROTECCION None
 # ==============================================================================
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
@@ -135,12 +135,19 @@ def fetch(url):
         print(f"[FETCH] HTTP {r.status_code} {len(r.text)} chars")
         if r.status_code == 200:
             return r.text
+        print(f"[WARN] HTTP {r.status_code}")
     except Exception as e:
         print(f"[WARN] fetch error: {e}")
     return None
 
 def parsear(html, nombre, horarios):
     print(f"[PARSE] {nombre}")
+    
+    # PROTECCION: si html es None, devolver None
+    if html is None:
+        print(f"[PARSE] {nombre}: HTML es None, saltando")
+        return None
+    
     soup = BeautifulSoup(html, 'html.parser')
     resultados = []
     h4s = soup.find_all('h4')
@@ -179,18 +186,71 @@ H05 = ["08:05 AM","09:05 AM","10:05 AM","11:05 AM","12:05 PM","01:05 PM","02:05 
 H15 = ["08:15 AM","09:15 AM","10:15 AM","11:15 AM","12:15 PM","01:15 PM","02:15 PM","03:15 PM","04:15 PM","05:15 PM","06:15 PM","07:15 PM","08:15 PM"]
 
 # ==============================================================================
-# LOTERIAS
+# LOTERIAS CON PROTECCION None
 # ==============================================================================
 
-def get_selva(): return parsear(fetch("https://loteriadehoy.com/animalito/selvaplus/resultados/"), "Selva Plus", H00)
-def get_granjita(): return parsear(fetch("https://loteriadehoy.com/animalito/lagranjita/resultados/"), "La Granjita", H00)
-def get_lotto(): return parsear(fetch("https://loteriadehoy.com/animalito/lottoactivo/resultados/"), "Lotto Activo", H00)
-def get_lottord(): return parsear(fetch("https://loteriadehoy.com/animalito/lottoactivord/resultados/"), "Lotto Activo RDominicana", H00)
-def get_lotto2(): return parsear(fetch("https://loteriadehoy.com/animalito/lottoactivo2(monjemillonario)/resultados/"), "Lotto Activo 2 (Monje Millonario)", H05)
-def get_guacharito(): return parsear(fetch("https://loteriadehoy.com/animalito/elguacharitomillonario/resultados/"), "El Guacharito Millonario", H30)
-def get_lottoint(): return parsear(fetch("https://loteriadehoy.com/animalito/lottoactivordint/resultados/"), "Lotto Activo Rd Int", H30)
-def get_centena(): return parsear(fetch("https://loteriadehoy.com/animalito/centenaplus/resultados/"), "Centena Plus", H15)
-def get_guacharo(): return parsear(fetch("https://loteriadehoy.com/animalito/guacharoactivo/resultados/"), "Guacharo Activo", H00)
+def get_selva():
+    html = fetch("https://loteriadehoy.com/animalito/selvaplus/resultados/")
+    if html is None:
+        print("[GET] Selva Plus: fetch fallo")
+        return None
+    return parsear(html, "Selva Plus", H00)
+
+def get_granjita():
+    html = fetch("https://loteriadehoy.com/animalito/lagranjita/resultados/")
+    if html is None:
+        print("[GET] La Granjita: fetch fallo")
+        return None
+    return parsear(html, "La Granjita", H00)
+
+def get_lotto():
+    html = fetch("https://loteriadehoy.com/animalito/lottoactivo/resultados/")
+    if html is None:
+        print("[GET] Lotto Activo: fetch fallo")
+        return None
+    return parsear(html, "Lotto Activo", H00)
+
+def get_lottord():
+    html = fetch("https://loteriadehoy.com/animalito/lottoactivord/resultados/")
+    if html is None:
+        print("[GET] Lotto Activo RD: fetch fallo")
+        return None
+    return parsear(html, "Lotto Activo RDominicana", H00)
+
+def get_lotto2():
+    html = fetch("https://loteriadehoy.com/animalito/lottoactivo2(monjemillonario)/resultados/")
+    if html is None:
+        print("[GET] Lotto Activo 2: fetch fallo")
+        return None
+    return parsear(html, "Lotto Activo 2 (Monje Millonario)", H05)
+
+def get_guacharito():
+    html = fetch("https://loteriadehoy.com/animalito/elguacharitomillonario/resultados/")
+    if html is None:
+        print("[GET] Guacharito: fetch fallo")
+        return None
+    return parsear(html, "El Guacharito Millonario", H30)
+
+def get_lottoint():
+    html = fetch("https://loteriadehoy.com/animalito/lottoactivordint/resultados/")
+    if html is None:
+        print("[GET] Lotto Activo Int: fetch fallo")
+        return None
+    return parsear(html, "Lotto Activo Rd Int", H30)
+
+def get_centena():
+    html = fetch("https://loteriadehoy.com/animalito/centenaplus/resultados/")
+    if html is None:
+        print("[GET] Centena Plus: fetch fallo")
+        return None
+    return parsear(html, "Centena Plus", H15)
+
+def get_guacharo():
+    html = fetch("https://loteriadehoy.com/animalito/guacharoactivo/resultados/")
+    if html is None:
+        print("[GET] Guacharo Activo: fetch fallo")
+        return None
+    return parsear(html, "Guacharo Activo", H00)
 
 # ==============================================================================
 # PROCESADORES
