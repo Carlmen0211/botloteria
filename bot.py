@@ -20,7 +20,8 @@ PORT = int(os.environ.get("PORT", 8080))
 
 print("=" * 60)
 print("[BOOT] Bot iniciando...")
-print(f"[BOOT] PORT={PORT} CANAL={CANAL_ID}")
+print(f"[BOOT] PORT={PORT}")
+print(f"[BOOT] CANAL_ID={CANAL_ID}")
 print(f"[BOOT] TOKEN={'SI' if TOKEN else 'NO'}")
 print("=" * 60)
 
@@ -94,35 +95,20 @@ def reset_store():
     print("[INFO] Store reseteado")
 
 # ==============================================================================
-# TELEGRAM
+# TELEGRAM (SOLO ENVIO, SIN POLLING)
 # ==============================================================================
 
 bot = telebot.TeleBot(TOKEN, parse_mode="Markdown") if TOKEN else None
 
 if bot:
-    @bot.message_handler(commands=['reset'])
-    def cmd_reset(message):
-        reset_store()
-        bot.reply_to(message, "✅ Store reseteado")
-
-    @bot.message_handler(commands=['status'])
-    def cmd_status(message):
-        msg = "📊 *Estado*\n"
-        for k in ["guacharito","guacharo","centenaplus","selva","granjita",
-                  "lottoactivo","lottoactivord","lottoactivo2","lottoactivoint"]:
-            msg += f"{k}: `{store.get(k,'vacío')}`\n"
-        bot.reply_to(message, msg, parse_mode="Markdown")
-
-    def polling():
-        print("[INFO] Comandos iniciados")
-        bot.infinity_polling()
-
-    threading.Thread(target=polling, daemon=True).start()
-    print("[BOOT] Comandos activos")
-
-# ==============================================================================
-# ENVIO
-# ==============================================================================
+    try:
+        me = bot.get_me()
+        print(f"[BOOT] Bot conectado: @{me.username}")
+    except Exception as e:
+        print(f"[BOOT] ERROR conectando bot: {e}")
+        bot = None
+else:
+    print("[BOOT] WARNING: No hay TOKEN")
 
 def enviar(mensaje):
     if not bot:
@@ -251,7 +237,7 @@ def proc_centena(r):
         agregar_historial("centenaplus", hora, raw)
         guardar_store(store)
         enviar(f"🔔 *RESULTADO RECIENTE* 🔔\n\n🎰 *Centena Plus* ({hora}):\n`{raw}`\n\n🍀 *@resultadoslafija* 🍀")
-        print(f"[OK] Centena PUBLICADO")
+        print("[OK] Centena PUBLICADO")
     else:
         print(f"[PROC] Centena: faltan {int(DELAY-trans)}s")
 
@@ -334,7 +320,7 @@ def bucle():
             print(f"[ERROR] {e}")
 
 # ==============================================================================
-# SERVIDOR HTTP (Render lo necesita)
+# SERVIDOR HTTP
 # ==============================================================================
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -352,14 +338,11 @@ def servidor():
         httpd.serve_forever()
 
 # ==============================================================================
-# ARRANQUE: Servidor en thread, bot en main
+# ARRANQUE
 # ==============================================================================
 
 if __name__ == "__main__":
-    # Servidor HTTP en thread separado (NO daemon - Render lo necesita vivo)
     srv = threading.Thread(target=servidor, name="HTTP")
     srv.daemon = False
     srv.start()
-    
-    # El bot corre en el hilo principal
     bucle()
