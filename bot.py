@@ -2,13 +2,12 @@ import os
 import time
 import json
 import threading
-import http.server
-import socketserver
 from datetime import datetime
 
 import requests
 from bs4 import BeautifulSoup
 import telebot
+from flask import Flask
 
 # ==============================================================================
 # CONFIGURACION
@@ -18,7 +17,12 @@ TOKEN = os.environ.get("BOT_TOKEN", "")
 CANAL_ID = os.environ.get("CANAL_ID", "@resultadoslafija")
 PORT = int(os.environ.get("PORT", 8080))
 
-print(f"[INFO] Bot iniciando... PORT={PORT} CANAL={CANAL_ID}")
+print("=" * 60)
+print("[BOOT] Bot iniciando...")
+print(f"[BOOT] PORT={PORT}")
+print(f"[BOOT] CANAL_ID={CANAL_ID}")
+print(f"[BOOT] TOKEN presente: {'SI' if TOKEN else 'NO'}")
+print("=" * 60)
 
 # ==============================================================================
 # PERSISTENCIA
@@ -30,7 +34,8 @@ def cargar_store():
     try:
         with open(ARCHIVO_STORE, "r") as f:
             return json.load(f)
-    except:
+    except Exception as e:
+        print(f"[BOOT] No se pudo cargar store.json: {e}")
         return {
             "fecha": "",
             "guacharito": "", "guacharo": "", "centenaplus": "",
@@ -45,10 +50,11 @@ def guardar_store(data):
         json.dump(data, f, indent=2)
 
 store = cargar_store()
+print(f"[BOOT] Store cargado. Fecha: {store.get('fecha','(nueva)')}")
 
 hoy = datetime.now().strftime("%Y-%m-%d")
 if store.get("fecha") != hoy:
-    print(f"[INFO] Nuevo dia: {hoy}. Resetear.")
+    print(f"[BOOT] Nuevo dia detectado: {hoy}. Resetear historial.")
     store["fecha"] = hoy
     store["historial_hoy"] = {}
     store["resumen_enviado"] = False
@@ -89,34 +95,48 @@ def reset_store():
     print("[INFO] Store reseteado.")
 
 # ==============================================================================
-# TELEGRAM
+# TELEGRAM BOT
 # ==============================================================================
 
-bot = telebot.TeleBot(TOKEN, parse_mode="Markdown") if TOKEN else None
-
-@bot.message_handler(commands=['reset'])
-def cmd_reset(message):
-    reset_store()
-    bot.reply_to(message, "✅ Store reseteado.")
-
-@bot.message_handler(commands=['status'])
-def cmd_status(message):
-    msg = "📊 *Estado*\\n"
-    for k in ["guacharito", "guacharo", "centenaplus", "selva", "granjita",
-              "lottoactivo", "lottoactivord", "lottoactivo2", "lottoactivoint"]:
-        msg += f"{k}: `{store.get(k,'(vacío)')}`\\n"
-    bot.reply_to(message, msg, parse_mode="Markdown")
-
-def polling_comandos():
-    print("[INFO] Comandos iniciados")
-    bot.infinity_polling(timeout=10, long_polling_timeout=5)
+print("[BOOT] Iniciando Telegram bot...")
+bot = None
+if TOKEN:
+    try:
+        bot = telebot.TeleBot(TOKEN, parse_mode="Markdown")
+        me = bot.get_me()
+        print(f"[BOOT] Bot conectado: @{me.username}")
+    except Exception as e:
+        print(f"[BOOT] ERROR conectando bot: {e}")
+else:
+    print("[BOOT] WARNING: No hay TOKEN")
 
 if bot:
+    @bot.message_handler(commands=['reset'])
+    def cmd_reset(message):
+        reset_store()
+        bot.reply_to(message, "✅ Store reseteado.")
+
+    @bot.message_handler(commands=['status'])
+    def cmd_status(message):
+        msg = "📊 *Estado*\n"
+        for k in ["guacharito", "guacharo", "centenaplus", "selva", "granjita",
+                  "lottoactivo", "lottoactivord", "lottoactivo2", "lottoactivoint"]:
+            msg += f"{k}: `{store.get(k,'(vacío)')}`\n"
+        bot.reply_to(message, msg, parse_mode="Markdown")
+
+    def polling_comandos():
+        print("[INFO] Hilo de comandos iniciado")
+        bot.infinity_polling(timeout=10, long_polling_timeout=5)
+
     threading.Thread(target=polling_comandos, daemon=True).start()
+
+# ==============================================================================
+# ENVIO
+# ==============================================================================
 
 def enviar(mensaje):
     if not bot:
-        print("[WARN] Bot no configurado")
+        print("[WARN] Bot no configurado, no se envia mensaje")
         return False
     try:
         bot.send_message(chat_id=CANAL_ID, text=mensaje, parse_mode="Markdown")
@@ -133,8 +153,10 @@ def enviar(mensaje):
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
 def fetch(url):
+    print(f"[FETCH] {url}")
     try:
         r = requests.get(url, headers=HEADERS, timeout=15)
+        print(f"[FETCH] HTTP {r.status_code}, {len(r.text)} chars")
         if r.status_code == 200:
             return r.text
         print(f"[WARN] HTTP {r.status_code} en {url}")
@@ -143,29 +165,24 @@ def fetch(url):
     return None
 
 # ==============================================================================
-# PARSEADOR CORREGIDO: usa h5 en vez de h6
+# PARSEADOR: usa h5 (no h6)
 # ==============================================================================
 
 def parsear_generico(html, nombre_buscar, horarios):
-    """
-    Parsea estructura de loteriadehoy.com:
-    h4 = numero + animal
-    h5 (hermano o siguiente) = nombre loteria + hora
-    """
+    print(f"[PARSE] Buscando '{nombre_buscar}'")
     soup = BeautifulSoup(html, 'html.parser')
     resultados = []
+    h4s = soup.find_all('h4')
+    print(f"[PARSE] h4 encontrados: {len(h4s)}")
     
-    for h4 in soup.find_all('h4'):
+    for h4 in h4s:
         texto_h4 = h4.get_text(strip=True)
-        
-        # Buscar el h5 hermano o el siguiente h5
         h5 = h4.find_next('h5')
         if not h5:
-            # Intentar sibling
             h5 = h4.find_next_sibling('h5')
         if not h5:
             continue
-            
+        
         texto_h5 = h5.get_text(strip=True)
         
         if nombre_buscar.lower() not in texto_h5.lower():
@@ -190,6 +207,7 @@ def parsear_generico(html, nombre_buscar, horarios):
                 "raw": f"{numero} {animal.capitalize()}"
             })
     
+    print(f"[PARSE] Resultados parseados: {len(resultados)}")
     return resultados[-1] if resultados else None
 
 # ==============================================================================
@@ -259,29 +277,34 @@ def obtener_guacharo():
 DELAY_CENTENA = 300  # 5 min
 
 def procesar_inmediato(key, r, nombre, emoji):
+    print(f"[PROC] {nombre}")
     if not r:
+        print(f"[PROC] {nombre}: SIN DATOS")
         return False
     raw = r["raw"]
     hora = r["hora"]
-    print(f"[INFO] {nombre} scrap: {raw} @ {hora}")
+    print(f"[PROC] {nombre}: scrap={raw} @ {hora}")
     if es_nuevo(key, raw):
+        print(f"[PROC] {nombre}: ES NUEVO -> enviando")
         agregar_historial(key, hora, raw)
         msg = f"🔔 *RESULTADO RECIENTE* 🔔\n\n{emoji} *{nombre}* ({hora}):\n`{raw}`\n\n🍀 *@resultadoslafija* 🍀"
         enviar(msg)
         return True
     else:
-        print(f"[INFO] {nombre}: sin cambios")
+        print(f"[PROC] {nombre}: sin cambios (ultimo={store.get(key,'')})")
     return False
 
 def procesar_centenaplus(r):
+    print("[PROC] Centena Plus")
     if not r:
+        print("[PROC] Centena Plus: SIN DATOS")
         return False
     raw = r["raw"]
     hora = r["hora"]
-    print(f"[INFO] Centena Plus scrap: {raw} @ {hora}")
+    print(f"[PROC] Centena Plus: scrap={raw} @ {hora}")
     
     if store.get("centenaplus") == raw:
-        print("[INFO] Centena Plus: ya publicado")
+        print("[PROC] Centena Plus: ya publicado")
         return False
     
     pendiente_raw = store.get("centenaplus_pendiente_raw", "")
@@ -291,7 +314,7 @@ def procesar_centenaplus(r):
         store["centenaplus_pendiente_raw"] = raw
         store["centenaplus_pendiente_time"] = time.time()
         guardar_store(store)
-        print(f"[INFO] Centena Plus: NUEVO - esperando {DELAY_CENTENA}s...")
+        print(f"[PROC] Centena Plus: NUEVO - esperando {DELAY_CENTENA}s...")
         return False
     
     tiempo_transcurrido = time.time() - pendiente_time
@@ -307,7 +330,7 @@ def procesar_centenaplus(r):
         return True
     else:
         restante = DELAY_CENTENA - tiempo_transcurrido
-        print(f"[INFO] Centena Plus: faltan {int(restante)}s")
+        print(f"[PROC] Centena Plus: faltan {int(restante)}s")
     return False
 
 # ==============================================================================
@@ -331,6 +354,7 @@ EMOJIS = {
 
 def enviar_resumen_diario():
     if store.get("resumen_enviado"):
+        print("[RESUMEN] Ya enviado hoy")
         return
     fecha_str = datetime.now().strftime("%d/%m/%Y")
     msg = f"📋 *RESUMEN DEL DIA* 📋\n📅 {fecha_str}\n\n"
@@ -350,6 +374,7 @@ def enviar_resumen_diario():
     if enviar(msg):
         store["resumen_enviado"] = True
         guardar_store(store)
+        print("[OK] Resumen enviado")
 
 def debe_enviar_resumen():
     ahora = datetime.now()
@@ -360,34 +385,34 @@ def debe_enviar_resumen():
 # ==============================================================================
 
 def ciclo():
-    print(f"[INFO] === Escaneando {datetime.now().strftime('%H:%M:%S')} ===")
+    print(f"\n{'='*60}")
+    print(f"[CICLO] Escaneando {datetime.now().strftime('%H:%M:%S')}")
+    print("=" * 60)
     
-    # MIN 00
     procesar_inmediato("selva", obtener_selva(), "Selva Plus", "🌴")
     procesar_inmediato("granjita", obtener_granjita(), "La Granjita", "🐔")
     procesar_inmediato("lottoactivo", obtener_lottoactivo(), "Lotto Activo", "🎯")
     procesar_inmediato("lottoactivord", obtener_lottoactivord(), "Lotto Activo RD", "🇩🇴")
     procesar_inmediato("guacharo", obtener_guacharo(), "Guacharo Activo", "🐦")
-    
-    # MIN 05
     procesar_inmediato("lottoactivo2", obtener_lottoactivo2(), "Lotto Activo 2 (Monje Millonario)", "🧙")
     
-    # MIN 15
     r = obtener_centenaplus()
     if r:
         procesar_centenaplus(r)
     
-    # MIN 30
     procesar_inmediato("guacharito", obtener_guacharito(), "Guacharito Millonario", "🎰")
     procesar_inmediato("lottoactivoint", obtener_lottoactivoint(), "Lotto Activo Internacional", "🌍")
     
-    # Resumen
     if debe_enviar_resumen():
         enviar_resumen_diario()
+    
+    print("[CICLO] Fin del escaneo")
 
 def bucle_bot():
+    print("[BOOT] Iniciando bucle de monitoreo en 3 segundos...")
     time.sleep(3)
     ciclo()
+    print("[BOOT] Primera corrida completada. Entrando en loop cada 90s...")
     while True:
         time.sleep(90)
         try:
@@ -396,29 +421,30 @@ def bucle_bot():
             print(f"[ERROR] En ciclo: {e}")
 
 # ==============================================================================
-# SERVIDOR HTTP
+# FLASK (Servidor HTTP para Render)
 # ==============================================================================
 
-class Handler(http.server.BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-type", "text/plain")
-        self.end_headers()
-        self.wfile.write(b"OK")
-    def log_message(self, format, *args):
-        pass
+app = Flask(__name__)
 
-def servidor():
-    print(f"[INFO] Servidor HTTP en puerto {PORT}")
-    with socketserver.TCPServer(("", PORT), Handler) as httpd:
-        httpd.serve_forever()
+@app.route('/')
+def health():
+    return "OK - Bot activo", 200
+
+@app.route('/favicon.ico')
+def favicon():
+    return "", 204
 
 # ==============================================================================
 # ARRANQUE
 # ==============================================================================
 
 if __name__ == "__main__":
-    t = threading.Thread(target=servidor, name="ServidorHTTP")
-    t.daemon = False
+    print("[BOOT] Iniciando Flask + Bot...")
+    
+    # El bot corre en un thread separado
+    t = threading.Thread(target=bucle_bot, name="BotMonitoreo")
+    t.daemon = True
     t.start()
-    bucle_bot()
+    
+    print(f"[BOOT] Flask iniciando en puerto {PORT}")
+    app.run(host="0.0.0.0", port=PORT, threaded=True)
